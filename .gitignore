@@ -6,6 +6,9 @@ logs/
 # Julia
 julia/*.jl.cov
 julia/deps/deps.jl
+# not tracked: resolved across different Julia versions/platforms (macOS dev
+# machine vs Linux cluster), each machine should Pkg.instantiate() its own
+julia/Manifest.toml
 
 # Python
 python/.venv/

@@ -34,8 +34,8 @@
 #SBATCH --array=1-9
 #SBATCH --job-name="example_epsilon_width"
 
-#SBATCH --output=/home/lkoehler/Documents/Slurm/R-%A_%a.out
-#SBATCH --error=/home/lkoehler/Documents/Slurm/R-%A_%a.err
+#SBATCH --output=/home/<username>/Documents/Slurm/R-%A_%a.out
+#SBATCH --error=/home/<username>/Documents/Slurm/R-%A_%a.err
 
 set -e
 
@@ -43,17 +43,17 @@ set -e
 #module load julia
 
 # EDIT PER CHECKOUT: path to the cloned repo on the cluster
-project="/home/lkoehler/Documents/MotilePacemaker"
+project="/home/<username>/Documents/MotilePacemaker"
 # EDIT PER SCAN: must match #SBATCH --job-name above
 scan_name="$SLURM_JOB_NAME"
 
-results="/data/biophys/lkoehler/Results/$scan_name"
+results="/data/biophys/<username>/Results/$scan_name"
 scratch="/scratch/$USER/$SLURM_JOB_ID"
 export OMP_NUM_THREADS=$SLURM_CPUS_PER_TASK
 
 # Make sure julia and its packages are found in the right place
-export JULIA_DEPOT_PATH=/home/lkoehler/.julia/
-export PATH="$PATH:/home/lkoehler/Documents/julia-1.11.3/bin"
+export JULIA_DEPOT_PATH=/home/<username>/.julia/
+export PATH="$PATH:/home/<username>/Documents/julia-1.11.3/bin"
 
 manifest="$project/configs/scans/$scan_name/manifest.toml"
 params_file="$project/configs/scans/$scan_name/parameters_array.txt"

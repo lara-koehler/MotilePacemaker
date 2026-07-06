@@ -158,7 +158,7 @@ task, `sed -n -e "$SLURM_ARRAY_TASK_ID p"` extracts that task's values):
 
 5. **Retrieve results**:
    ```bash
-   rsync -avz your-cluster:/data/biophys/lkoehler/Results/<scan_name>/ data/raw/scans/<scan_name>/
+   rsync -avz your-cluster:/data/biophys/<username>/Results/<scan_name>/ data/raw/scans/<scan_name>/
    ```
    After that, every `<scan_name>_<k>.h5` works with the existing Python
    pipeline exactly like any other run (`motilepacemaker.io.load_run`,
