@@ -1,0 +1,16 @@
+# Example parameter-scan sweep spec, consumed by
+# python/scripts/generate_param_scan.py. Not a scientifically meaningful
+# sweep -- just a runnable demonstration of the format (2 parameters x 3
+# values each = 9 combinations).
+#
+# base_config is resolved relative to this file's own directory.
+
+base_config = "../wave.toml"
+
+[[sweep]]
+key = "mechanics.epsilon_LJ"
+values = [0.5, 1.0, 2.0]
+
+[[sweep]]
+key = "coupling.pacemaker_width"
+values = [0.01, 0.02, 0.05]

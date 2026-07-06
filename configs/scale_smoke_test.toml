@@ -1,0 +1,47 @@
+# Not a physics regime to keep -- a quick end-to-end smoke test for the
+# scaling work (localized pacemaker field, cell/Verlet list, source_save_every)
+# at N=300 sources with a short-range mechanical interaction.
+
+[grid]
+L = 1.0
+nx = 100
+ny = 100
+
+[time]
+dt = 0.001
+n_steps = 20000
+save_every = 500
+source_save_every = 50
+seed = 1
+
+[chemistry]
+tau_u = 1.0
+tau_v = 12.5
+a = 0.2
+b = 0.2
+I0 = -1.6
+Du = 0.001
+Dv = 0.0
+
+[coupling]
+pacemaker_strength = 2.0
+pacemaker_width = 0.02
+cutoff_factor = 4.0
+
+[mechanics]
+mobility = 0.1
+sigma = 0.005
+epsilon_LJ = 1.0
+interaction_strength = 0.1
+interaction_range = 0.03
+u_threshold = 0.0
+reciprocity = "nonreciprocal"
+
+[noise]
+field_sigma_u = 0.0
+field_sigma_v = 0.0
+position_sigma = 0.0
+
+[sources]
+n_sources = 300
+arrangement = "random"

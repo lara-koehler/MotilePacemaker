@@ -1,0 +1,61 @@
+# Same chemistry/mechanics as configs/wave.toml (clean wave regime: moderate
+# feedback chi~0.3, Gamma~1.6, reciprocal coupling) but sources start on a
+# regular 2D grid instead of a 1D line, so wavefronts emanate from and
+# collide between multiple directions instead of just propagating away from
+# a single row.
+#
+# Sources: 500 on a 20x25 grid_fill, filling the whole domain from the first
+# step (an earlier version used a 3x4=12 grid() centered at (0.5, 0.5), which
+# was fine at that size but left a 500-source version clustered in a small
+# block in the middle rather than spread across the domain).
+#
+# pacemaker_width shrunk from 0.05 to 0.012 (~0.3x the 0.04 source spacing)
+# and grid resolution bumped to nx=ny=300 (dx~0.0033, so the shrunk width is
+# still ~3.6 grid cells across, not under-resolved): at width=0.05 the 500
+# overlapping pacemaker Gaussians summed to an almost perfectly flat forcing
+# field (tested: min/max only 15.706/15.708), so the whole domain just
+# synchronized into one frozen state instead of showing a wave.
+
+[grid]
+L = 1.0
+nx = 300
+ny = 300
+
+[time]
+dt = 0.001
+n_steps = 180000   # total time = 180 (~5 source periods)
+save_every = 300
+source_save_every = 50
+seed = 1
+
+[chemistry]
+tau_u = 1.0
+tau_v = 12.5
+a = 0.2
+b = 0.2
+I0 = -1.6
+Du = 0.001
+Dv = 0.0
+
+[coupling]
+pacemaker_strength = 2.0
+pacemaker_width = 0.012
+
+[mechanics]
+mobility = 0.1
+sigma = 0.01
+epsilon_LJ = 1.0
+interaction_strength = 0.1
+interaction_range = 0.2
+u_threshold = 0.0
+reciprocity = "reciprocal"
+
+[noise]
+field_sigma_u = 0.0
+field_sigma_v = 0.0
+position_sigma = 0.0
+
+[sources]
+arrangement = "grid_fill"
+grid_rows = 20
+grid_cols = 25

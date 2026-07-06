@@ -1,0 +1,63 @@
+# "Chaotic" / strong-feedback regime: same chemistry as wave.toml (so the
+# background is still excitable and each source is still intrinsically
+# oscillatory), but mechanical feedback is pushed hard -- mobility and
+# interaction_strength both 5x -> chi ~ 8 (particles fast vs. the wave),
+# Gamma ~ 15 (mechanical relaxation much faster than one chemical cycle) --
+# plus non-reciprocal coupling and a disordered (random, denser) 2D source
+# arrangement instead of a line, to test the chi>>1, Gamma>>1 regime the
+# proposal flags as a candidate for deterministic chaos / loss of coherence.
+#
+# 500 random sources (up from 24); "random" already fills the whole domain
+# regardless of N, so no arrangement change was needed here.
+#
+# pacemaker_width shrunk from 0.05 to 0.01 and grid bumped to nx=ny=300, for
+# the same reason as wave.toml/wave_2d.toml: at width=0.05 and this density
+# (typical nearest-neighbor spacing ~0.022 for 500 random points here), the
+# pacemaker Gaussians overlap heavily and the field loses spatial structure.
+# Random placement means some local clusters will still be closer than
+# average and partially overlap even at the smaller width -- that's expected
+# and arguably fits the "disordered" spirit of this config, unlike the
+# uniform grids in wave.toml/wave_2d.toml.
+
+[grid]
+L = 1.0
+nx = 300
+ny = 300
+
+[time]
+dt = 0.001
+n_steps = 150000   # total time = 150
+save_every = 250
+source_save_every = 50
+seed = 7
+
+[chemistry]
+tau_u = 1.0
+tau_v = 12.5
+a = 0.2
+b = 0.2
+I0 = -1.6
+Du = 0.001
+Dv = 0.0
+
+[coupling]
+pacemaker_strength = 2.0
+pacemaker_width = 0.01
+
+[mechanics]
+mobility = 0.5
+sigma = 0.02
+epsilon_LJ = 1.0
+interaction_strength = 0.5
+interaction_range = 0.2
+u_threshold = 0.0
+reciprocity = "nonreciprocal"
+
+[noise]
+field_sigma_u = 0.0
+field_sigma_v = 0.0
+position_sigma = 0.0
+
+[sources]
+n_sources = 500
+arrangement = "random"

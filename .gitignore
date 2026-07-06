@@ -1,0 +1,19 @@
+# non-code artifacts: always ignored, whole folder (code auto-creates these
+# via mkpath/mkdir on write, so there's no need to pre-seed them in git)
+data/
+logs/
+
+# Julia
+julia/*.jl.cov
+julia/deps/deps.jl
+
+# Python
+python/.venv/
+python/**/__pycache__/
+python/**/*.egg-info/
+*.pyc
+
+# OS / editors
+.DS_Store
+.vscode/
+.claude/
