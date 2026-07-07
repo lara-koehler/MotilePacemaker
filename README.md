@@ -117,6 +117,21 @@ task, `sed -n -e "$SLURM_ARRAY_TASK_ID p"` extracts that task's values):
    To update later, just `git pull` on the cluster (and re-run
    `Pkg.instantiate()` if `julia/Manifest.toml` changed).
 
+   `aggregate_scan.py` (step 5 below) also needs the `motilepacemaker`
+   package, so set up a Python venv on the cluster too, same as locally
+   (this is a separate install from your laptop's `python/.venv` -- it
+   doesn't get created by `git clone`/`git pull`):
+   ```bash
+   cd MotilePacemaker/python
+   python3 -m venv .venv
+   source .venv/bin/activate
+   pip install -r requirements.txt
+   ```
+   Usually best run on a login node (some clusters block internet access,
+   needed here for `pip install`, from compute nodes). Re-run
+   `pip install -r requirements.txt` after a `git pull` if
+   `python/pyproject.toml` changed.
+
 2. **Write a sweep spec** naming a base config and the dotted TOML keys to
    scan (any section: `mechanics.*`, `coupling.*`, `sources.*`, ...), e.g.
    `configs/scans/example_epsilon_width.toml`:
@@ -165,10 +180,11 @@ task, `sed -n -e "$SLURM_ARRAY_TASK_ID p"` extracts that task's values):
    cluster first**, against the full-size files there, then copy down only
    the small result:
    ```bash
-   # on the cluster (needs the same python/requirements.txt installed there)
-   python python/scripts/aggregate_scan.py \
-       configs/scans/<scan_name> /data/biophys/<username>/Results/<scan_name> \
-       data/raw/scans/<scan_name>
+   # on the cluster, with the python/.venv from step 1 activated
+   cd MotilePacemaker/python && source .venv/bin/activate
+   python scripts/aggregate_scan.py \
+       ../configs/scans/<scan_name> /data/biophys/<username>/Results/<scan_name> \
+       ../data/raw/scans/<scan_name>
    ```
    This distills each task's raw `.h5` down to just a kymograph, the final
    field/positions, a handful of source trajectories, and the Kuramoto order
