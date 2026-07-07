@@ -8,10 +8,13 @@ see configs/scans/example_epsilon_width.toml), writes:
   <out_dir>/manifest.toml         -- base_config path + ordered dotted keys, for run_scan.jl
   <out_dir>/base_config.toml      -- a copy of the base config (so the scan directory is
                                       self-contained and immune to later edits of the original)
-  <out_dir>/scan_index.csv        -- task_index,<key1>,<key2>,... lookup table (1-indexed,
-                                      matching SLURM's array convention and run_scan.jl's
-                                      default per-task seed)
-and prints the combination count, for `#SBATCH --array=1-N`.
+  <out_dir>/scan_index.csv        -- task_index,replicate,<key1>,<key2>,... lookup table
+                                      (1-indexed, matching SLURM's array convention and
+                                      run_scan.jl's default per-task seed)
+and prints the total simulation count (combinations x repeats), for
+`#SBATCH --array=1-N`. A top-level `repeats = N` in the sweep spec (default 1)
+runs each parameter combination N times, relying on run_scan.jl seeding each
+run from its line number so identical rows get different initial conditions.
 
 Defaults out_dir to a sibling directory named after the spec file, e.g.
 configs/scans/example_epsilon_width.toml -> configs/scans/example_epsilon_width/.
@@ -35,7 +38,7 @@ def main():
     out_dir = Path(sys.argv[2]) if len(sys.argv) > 2 else spec_path.parent / spec_path.stem
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    keys, rows = scan.generate_grid(spec)
+    keys, rows, replicate_ids = scan.generate_grid(spec)
 
     base_config_src = (spec_path.parent / spec["base_config"]).resolve()
     shutil.copy(base_config_src, out_dir / "base_config.toml")
@@ -49,9 +52,9 @@ def main():
 
     with open(out_dir / "scan_index.csv", "w", newline="") as f:
         writer = csv.writer(f)
-        writer.writerow(["task_index", *keys])
-        for i, row in enumerate(rows, start=1):
-            writer.writerow([i, *row])
+        writer.writerow(["task_index", "replicate", *keys])
+        for i, (row, replicate) in enumerate(zip(rows, replicate_ids), start=1):
+            writer.writerow([i, replicate, *row])
 
     print(f"Wrote {len(rows)} combinations to {out_dir}/parameters_array.txt")
     print(f"Set #SBATCH --array=1-{len(rows)}")

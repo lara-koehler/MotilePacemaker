@@ -122,6 +122,7 @@ task, `sed -n -e "$SLURM_ARRAY_TASK_ID p"` extracts that task's values):
    `configs/scans/example_epsilon_width.toml`:
    ```toml
    base_config = "../wave.toml"
+   repeats = 1   # optional, default 1 -- see step 4 below
 
    [[sweep]]
    key = "mechanics.epsilon_LJ"
@@ -132,26 +133,28 @@ task, `sed -n -e "$SLURM_ARRAY_TASK_ID p"` extracts that task's values):
    values = [0.01, 0.02, 0.05]
    ```
 
-3. **Generate the scan** (cartesian product of all `values` lists):
+3. **Generate the scan** (cartesian product of all `values` lists, each
+   combination repeated `repeats` times):
    ```bash
    cd python && source .venv/bin/activate
    python scripts/generate_param_scan.py ../configs/scans/example_epsilon_width.toml
    ```
    Writes `configs/scans/example_epsilon_width/{parameters_array.txt,
-   manifest.toml, base_config.toml, scan_index.csv}` and prints the
-   combination count -- use it for `#SBATCH --array=1-N` in
-   `cluster/launch_scan.sh` (also set `--job-name` to the scan's name, which
-   `launch_scan.sh` uses to find the right `configs/scans/<name>/` directory
-   and to name outputs `<name>_<task_id>.h5`).
+   manifest.toml, base_config.toml, scan_index.csv}` and prints the total
+   simulation count (combinations x repeats) -- use it for
+   `#SBATCH --array=1-N` in `cluster/launch_scan.sh` (also set `--job-name`
+   to the scan's name, which `launch_scan.sh` uses to find the right
+   `configs/scans/<name>/` directory and to name outputs `<name>_<task_id>.h5`).
 
 4. **Submit**: `sbatch cluster/launch_scan.sh` (after editing the `project`
    path and `--array`/`--job-name` for your scan, per the comments in the
    script). Each task writes straight to that job's `$scratch`, then copies
    to `/data/.../Results/<scan_name>/<scan_name>_<task_id>.h5`.
 
-   To repeat a parameter combination with a different initial condition,
-   just duplicate that line in `parameters_array.txt` -- `run_scan.jl` uses
-   the SLURM array task ID as the run's default random seed, so two
+   To run the same parameter combination multiple times with different
+   initial conditions, set `repeats` in the sweep spec (or manually duplicate
+   a line in `parameters_array.txt` for a one-off repeat) -- `run_scan.jl`
+   uses the SLURM array task ID as the run's default random seed, so
    otherwise-identical lines automatically get different initial conditions
    (unless the sweep spec explicitly includes `"time.seed"` as a swept key,
    in which case that value wins instead).

@@ -15,8 +15,8 @@
 #   python python/scripts/generate_param_scan.py configs/scans/<scan_name>.toml
 #   -> prints "Set #SBATCH --array=1-N"; put that N below.
 
-#SBATCH --time=48:00:00
-#SBATCH --partition=medium
+##SBATCH --time=48:00:00
+##SBATCH --partition=medium
 
 #medium 2-00:00:00
 #short 02:00:00
@@ -31,11 +31,11 @@
 # EDIT PER SCAN: array range from generate_param_scan.py's printed count,
 # and a descriptive job name (by convention: "<scan_name>", matching the
 # sweep spec's file stem and the output naming below).
-#SBATCH --array=1-9
-#SBATCH --job-name="example_epsilon_width"
+##SBATCH --array=1-9
+##SBATCH --job-name="260708ScanChemistry"
 
-#SBATCH --output=/home/<username>/Documents/Slurm/R-%A_%a.out
-#SBATCH --error=/home/<username>/Documents/Slurm/R-%A_%a.err
+#SBATCH --output=/home/lkoehler/Documents/Slurm/MotilePacemaker/R-%A_%a.out
+#SBATCH --error=/home/lkoehler/Documents/Slurm/MotilePacemaker/R-%A_%a.err
 
 set -e
 
@@ -43,17 +43,17 @@ set -e
 #module load julia
 
 # EDIT PER CHECKOUT: path to the cloned repo on the cluster
-project="/home/<username>/Documents/MotilePacemaker"
+project="/home/lkoehler/Documents/MotilePacemaker"
 # EDIT PER SCAN: must match #SBATCH --job-name above
 scan_name="$SLURM_JOB_NAME"
 
-results="/data/biophys/<username>/Results/$scan_name"
+results="/data/biophys/lkoehler/MotilePacemaker/$scan_name"
 scratch="/scratch/$USER/$SLURM_JOB_ID"
 export OMP_NUM_THREADS=$SLURM_CPUS_PER_TASK
 
 # Make sure julia and its packages are found in the right place
-export JULIA_DEPOT_PATH=/home/<username>/.julia/
-export PATH="$PATH:/home/<username>/Documents/julia-1.11.3/bin"
+export JULIA_DEPOT_PATH=/home/lkoehler/.julia/
+export PATH="$PATH:/home/lkoehler/Documents/julia-1.11.3/bin"
 
 manifest="$project/configs/scans/$scan_name/manifest.toml"
 params_file="$project/configs/scans/$scan_name/parameters_array.txt"
