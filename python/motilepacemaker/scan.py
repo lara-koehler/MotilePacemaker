@@ -1,8 +1,12 @@
 """Parameter-scan sweep specs: sweep spec TOML -> parameters_array.txt + manifest.toml,
-consumed by julia/scripts/run_scan.jl on the cluster (or locally)."""
+consumed by julia/scripts/run_scan.jl on the cluster (or locally). Also reads
+back scan_index.csv for post-processing (aggregate_scan.py, the phase-diagram
+scripts)."""
 
+import csv
 import itertools
 import sys
+from pathlib import Path
 
 if sys.version_info >= (3, 11):
     import tomllib
@@ -60,3 +64,76 @@ def format_manifest_toml(base_config_relpath, keys):
         f"base_config = {_toml_string_literal(base_config_relpath)}\n"
         f"keys = [{keys_toml}]\n"
     )
+
+
+def coerce_value(s):
+    """Type-infer a scan_index.csv cell: int, then float, else leave as string."""
+    try:
+        return int(s)
+    except ValueError:
+        pass
+    try:
+        return float(s)
+    except ValueError:
+        pass
+    return s
+
+
+def load_scan_index(scan_dir):
+    """Read `<scan_dir>/scan_index.csv` (written by `generate_param_scan.py`)
+    into a list of dicts: `task_index`/`replicate` as `int`, swept-key
+    columns type-inferred (`int`/`float`/`str`), keyed by their exact column
+    name (e.g. `"chemistry.b"`)."""
+    path = Path(scan_dir) / "scan_index.csv"
+    with open(path, newline="") as f:
+        reader = csv.DictReader(f)
+        rows = []
+        for raw_row in reader:
+            row = {"task_index": int(raw_row["task_index"]), "replicate": int(raw_row["replicate"])}
+            for key, value in raw_row.items():
+                if key in ("task_index", "replicate"):
+                    continue
+                row[key] = coerce_value(value)
+            rows.append(row)
+    return rows
+
+
+def select_task_grid(rows, key1, key2, replicate=1, fixed=None):
+    """Build a task-index grid for a 2-key phase diagram from `load_scan_index`'s
+    rows: `key1`'s distinct values become grid rows, `key2`'s become columns.
+
+    `fixed` (optional `{other_key: value}`) pins any additional swept keys --
+    only needed if the scan sweeps more than 2 keys. Raises `ValueError` if,
+    after filtering by `replicate`/`fixed`, more than one task still matches
+    a given cell (ambiguous -- add more `fixed` constraints) rather than
+    silently picking one.
+
+    Returns `(key1_values, key2_values, task_index_grid)`: the first two are
+    sorted lists of distinct values; `task_index_grid` is
+    `len(key1_values) x len(key2_values)`, entries `None` for missing combos.
+    """
+    fixed = fixed or {}
+    filtered = [
+        r for r in rows
+        if r["replicate"] == replicate and all(r.get(k) == v for k, v in fixed.items())
+    ]
+
+    key1_values = sorted({r[key1] for r in filtered})
+    key2_values = sorted({r[key2] for r in filtered})
+
+    task_index_grid = []
+    for v1 in key1_values:
+        row_tasks = []
+        for v2 in key2_values:
+            matches = [r for r in filtered if r[key1] == v1 and r[key2] == v2]
+            if len(matches) > 1:
+                other_keys = [k for k in filtered[0] if k not in ("task_index", "replicate", key1, key2)]
+                raise ValueError(
+                    f"Ambiguous cell ({key1}={v1}, {key2}={v2}): {len(matches)} tasks match "
+                    f"(task_indices={[m['task_index'] for m in matches]}). This scan sweeps "
+                    f"additional keys ({other_keys}) -- pin them via the `fixed=` argument."
+                )
+            row_tasks.append(matches[0]["task_index"] if matches else None)
+        task_index_grid.append(row_tasks)
+
+    return key1_values, key2_values, task_index_grid

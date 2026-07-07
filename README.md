@@ -159,14 +159,55 @@ task, `sed -n -e "$SLURM_ARRAY_TASK_ID p"` extracts that task's values):
    (unless the sweep spec explicitly includes `"time.seed"` as a swept key,
    in which case that value wins instead).
 
-5. **Retrieve results**:
+5. **Retrieve results**: raw per-task outputs can be large (e.g. ~900 MB for
+   an nx=300, 180k-step run) -- a full scan can easily reach tens or hundreds
+   of GB, too much to `rsync` down wholesale. Instead, **aggregate on the
+   cluster first**, against the full-size files there, then copy down only
+   the small result:
    ```bash
-   rsync -avz your-cluster:/data/biophys/<username>/Results/<scan_name>/ data/raw/scans/<scan_name>/
+   # on the cluster (needs the same python/requirements.txt installed there)
+   python python/scripts/aggregate_scan.py \
+       configs/scans/<scan_name> /data/biophys/<username>/Results/<scan_name> \
+       data/raw/scans/<scan_name>
    ```
-   After that, every `<scan_name>_<k>.h5` works with the existing Python
-   pipeline exactly like any other run (`motilepacemaker.io.load_run`,
-   `plot_summary.py`, `metrics.py`, ...) -- each file's `config_toml`
-   attribute records that task's *actual* resolved parameters (including the
-   per-task seed), so no separate bookkeeping is needed to know what a given
-   result was run with (`scan_index.csv`, generated alongside the scan, is a
-   quicker human-readable lookup from task index to swept values).
+   This distills each task's raw `.h5` down to just a kymograph, the final
+   field/positions, a handful of source trajectories, and the Kuramoto order
+   parameter over time (computed from the full source population before
+   discarding it) into one `data/raw/scans/<scan_name>/<scan_name>_aggregate.h5`
+   -- typically a ~100-300x size reduction, small enough to `rsync` normally:
+   ```bash
+   rsync -avz your-cluster:.../data/raw/scans/<scan_name>/ data/raw/scans/<scan_name>/
+   ```
+   Missing/failed task files are skipped with a warning rather than aborting,
+   so this can also be run against a scan that's still in progress. Every
+   raw `<scan_name>_<k>.h5` still works with the existing Python pipeline
+   unchanged if you do want to pull one down individually
+   (`motilepacemaker.io.load_run`, `plot_summary.py`, `metrics.py`, ...) --
+   each file's `config_toml` attribute records that task's actual resolved
+   parameters (including the per-task seed), and `scan_index.csv` (generated
+   alongside the scan) is a quick human-readable lookup from task index to
+   swept values.
+
+6. **Plot from the aggregate**:
+   ```bash
+   cd python && source .venv/bin/activate
+
+   # one task's 3-panel summary (final field state, kymograph, trajectories)
+   python scripts/plot_scan_task_summary.py ../data/raw/scans/<scan_name>/<scan_name>_aggregate.h5 7
+
+   # grid of final-state images: key1 -> rows, key2 -> columns, one replicate per cell
+   python scripts/plot_phase_diagram.py ../data/raw/scans/<scan_name>/<scan_name>_aggregate.h5 \
+       ../configs/scans/<scan_name> chemistry.I0 chemistry.b
+
+   # scalar phase diagram: Kuramoto order parameter averaged over the last few steps
+   python scripts/plot_phase_diagram_kuramoto.py ../data/raw/scans/<scan_name>/<scan_name>_aggregate.h5 \
+       ../configs/scans/<scan_name> chemistry.I0 chemistry.b --n-last 10
+   ```
+   Both phase-diagram scripts take `--replicate N` (default 1, since a scan
+   with `repeats > 1` has several tasks per parameter combination) and
+   `--fix key=value` (repeatable; only needed if the scan sweeps more than
+   the 2 keys being plotted, to resolve which task a cell should show).
+
+   All output PNGs are saved to `data/processed/<scan_name>/`: per-task
+   plots as `<task_index>_summary.png`, whole-scan plots with a leading
+   underscore, e.g. `_phase_diagram_chemistry.I0_chemistry.b.png`.
