@@ -98,9 +98,35 @@ source .venv/bin/activate
 pip install -r requirements.txt
 
 python scripts/plot_summary.py ../data/raw/minimal/output.h5
+
+# animate the field + source positions over time (requires ffmpeg on PATH)
+python scripts/make_movie.py ../data/raw/minimal/output.h5 ../data/processed/minimal_movie.mp4
+
+# quick preview: only read/render every 4th saved field frame
+python scripts/make_movie.py ../data/raw/minimal/output.h5 ../data/processed/minimal_preview.mp4 4
 ```
 
 **This local workflow (`run_minimal.jl` + a single `configs/*.toml` file) is unaffected by the cluster tooling below** -- it's still the fastest way to run one simulation.
+
+Both scripts avoid reading a raw run's full `u_field_stack` -- easily the
+dominant contributor to file size (~1 GB for a large run) -- since that
+matters most when `<output.h5>` sits on a slow/network-mounted path (e.g. a
+mounted cluster results drive, see step 5 below):
+- `plot_summary.py` (via `motilepacemaker.io.load_run_lite`) only reads the
+  last saved field frame and a thin y=L/2 kymograph strip, both via HDF5
+  hyperslab selections, plus the source trajectories in full. One
+  consequence: the final-state panel's color scale is derived from that
+  frame + strip rather than the true max over the whole run (which would
+  need the full array) -- in practice indistinguishable for a roughly
+  spatially-homogeneous field.
+- `make_movie.py`'s optional `stride` argument (default 1) reads/renders
+  only every `stride`-th saved field frame, via the same kind of hyperslab
+  selection -- a fast preview before committing to a full-resolution movie.
+  If `<output.h5>`'s filename matches the `<scan_name>_<task_index>.h5`
+  convention `run_scan.jl` writes, and `configs/scans/<scan_name>/
+  manifest.toml` can be found, the swept parameters' actual values for that
+  task are shown on every frame automatically (no flag needed, silently
+  skipped for a plain non-scan run).
 
 ## Cluster parameter scans (SLURM)
 
@@ -197,12 +223,15 @@ task, `sed -n -e "$SLURM_ARRAY_TASK_ID p"` extracts that task's values):
    Missing/failed task files are skipped with a warning rather than aborting,
    so this can also be run against a scan that's still in progress. Every
    raw `<scan_name>_<k>.h5` still works with the existing Python pipeline
-   unchanged if you do want to pull one down individually
-   (`motilepacemaker.io.load_run`, `plot_summary.py`, `metrics.py`, ...) --
-   each file's `config_toml` attribute records that task's actual resolved
-   parameters (including the per-task seed), and `scan_index.csv` (generated
-   alongside the scan) is a quick human-readable lookup from task index to
-   swept values.
+   unchanged if you do want to pull one down individually, or even just
+   point straight at it over a mounted path without copying it down at all
+   (`motilepacemaker.io.load_run`/`load_run_lite`, `plot_summary.py`,
+   `make_movie.py`, `metrics.py`, ...) -- each file's `config_toml` attribute
+   records that task's actual resolved parameters (including the per-task
+   seed), and `scan_index.csv` (generated alongside the scan) is a quick
+   human-readable lookup from task index to swept values (also queryable
+   from Python: `motilepacemaker.scan.load_scan_index`, `task_params`,
+   `task_indices_for_params`).
 
 6. **Plot from the aggregate**:
    ```bash
@@ -215,12 +244,16 @@ task, `sed -n -e "$SLURM_ARRAY_TASK_ID p"` extracts that task's values):
    python scripts/plot_phase_diagram.py ../data/raw/scans/<scan_name>/<scan_name>_aggregate.h5 \
        ../configs/scans/<scan_name> chemistry.I0 chemistry.b
 
+   # same grid, but each cell is that task's kymograph instead of its final state
+   python scripts/plot_phase_diagram_kymograph.py ../data/raw/scans/<scan_name>/<scan_name>_aggregate.h5 \
+       ../configs/scans/<scan_name> chemistry.I0 chemistry.b
+
    # scalar phase diagram: Kuramoto order parameter averaged over the last few steps
    python scripts/plot_phase_diagram_kuramoto.py ../data/raw/scans/<scan_name>/<scan_name>_aggregate.h5 \
        ../configs/scans/<scan_name> chemistry.I0 chemistry.b --n-last 10
    ```
-   Both phase-diagram scripts take `--replicate N` (default 1, since a scan
-   with `repeats > 1` has several tasks per parameter combination) and
+   All three phase-diagram scripts take `--replicate N` (default 1, since a
+   scan with `repeats > 1` has several tasks per parameter combination) and
    `--fix key=value` (repeatable; only needed if the scan sweeps more than
    the 2 keys being plotted, to resolve which task a cell should show).
 

@@ -1,18 +1,18 @@
 #!/usr/bin/env python3
 """
-Usage: python scripts/plot_phase_diagram.py <aggregate.h5> <scan_config_dir> <key1> <key2>
+Usage: python scripts/plot_phase_diagram_kymograph.py <aggregate.h5> <scan_config_dir> <key1> <key2>
            [--replicate N] [--fix key=value ...] [out_dir]
 
-Tiles the final-state field snapshot of one task per (key1, key2) combination
-into one big grid figure -- key1's distinct values become rows, key2's
-become columns (e.g. --key1 chemistry.I0 --key2 chemistry.b gives a 6x8 grid
-for the 260708ScanChemistry scan). Picks one replicate per combination
-(default 1); if the scan sweeps more than 2 keys, pin the others with
-repeated --fix key=value flags or cell selection is ambiguous (raises an
-error listing what's unresolved).
+Tiles the kymograph of one task per (key1, key2) combination into one big
+grid figure -- exactly like plot_phase_diagram.py, but each cell shows that
+task's kymograph (space-time plot at y=L/2) instead of its final-state field
+snapshot. key1's distinct values become rows, key2's become columns. Picks
+one replicate per combination (default 1); if the scan sweeps more than 2
+keys, pin the others with repeated --fix key=value flags or cell selection
+is ambiguous (raises an error listing what's unresolved).
 
 Whole-scan plot (not tied to one task), saved with a leading underscore per
-convention: data/processed/<scan_name>/_phase_diagram_<key1>_<key2>.png
+convention: data/processed/<scan_name>/_phase_diagram_kymograph_<key1>_<key2>.png
 """
 import sys
 from pathlib import Path
@@ -46,7 +46,7 @@ def parse_args(argv):
 def main():
     positional, replicate, fixed = parse_args(sys.argv[1:])
     if len(positional) < 4:
-        print("Usage: plot_phase_diagram.py <aggregate.h5> <scan_config_dir> <key1> <key2> "
+        print("Usage: plot_phase_diagram_kymograph.py <aggregate.h5> <scan_config_dir> <key1> <key2> "
               "[--replicate N] [--fix key=value ...] [out_dir]")
         sys.exit(1)
 
@@ -69,14 +69,11 @@ def main():
                 task_index = task_grid[i][j]
                 if task_index is None:
                     continue
-                group = f[f"task_{task_index}"]
-                u = group["final_u_field"][()]
-                pos = group["final_positions"][()]
-                L = group.attrs["L"]
-                cells[i][j] = (u, pos, L)
-                all_values.append(u)
+                kymo = f[f"task_{task_index}"]["kymograph"][()]
+                cells[i][j] = kymo
+                all_values.append(kymo)
 
-        vmax = max(np.max(np.abs(u)) for u in all_values) if all_values else 1.0
+        vmax = max(np.max(np.abs(k)) for k in all_values) if all_values else 1.0
 
         fig, axes = plt.subplots(n_rows, n_cols, figsize=(2.2 * n_cols, 2.2 * n_rows), squeeze=False)
         for i in range(n_rows):
@@ -85,8 +82,7 @@ def main():
                 if cells[i][j] is None:
                     ax.axis("off")
                     continue
-                u, pos, L = cells[i][j]
-                viz.plot_field_snapshot(u, pos, L, ax=ax, vmin=-vmax, vmax=vmax, title="", markersize=8)
+                viz.plot_kymograph(cells[i][j], ax=ax, vmax=vmax)
                 ax.set_xticks([])
                 ax.set_yticks([])
                 ax.set_xlabel("")
@@ -98,12 +94,12 @@ def main():
                 if i == 0:
                     ax.set_title(str(key2_values[j]))
 
-    fig.suptitle(f"{scan_name}: final state, replicate {replicate}")
+    fig.suptitle(f"{scan_name}: kymograph, replicate {replicate}")
     fig.supxlabel(key2)
     fig.supylabel(key1)
     fig.tight_layout()
 
-    out_path = out_dir / f"_phase_diagram_{key1}_{key2}.png"
+    out_path = out_dir / f"_phase_diagram_kymograph_{key1}_{key2}.png"
     fig.savefig(out_path, dpi=150)
     print(f"Saved {out_path}")
 

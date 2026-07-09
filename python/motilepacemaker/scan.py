@@ -66,6 +66,22 @@ def format_manifest_toml(base_config_relpath, keys):
     )
 
 
+def load_manifest(scan_dir):
+    """Read `<scan_dir>/manifest.toml` (written by `generate_param_scan.py`):
+    `{"base_config": str, "keys": [dotted swept-key strings]}`."""
+    with open(Path(scan_dir) / "manifest.toml", "rb") as f:
+        return tomllib.load(f)
+
+
+def dotted_get(d, dotted_key):
+    """Look up a dotted TOML key (e.g. `"chemistry.b"`) in a nested dict,
+    such as the `params` dict returned by `io.load_run`."""
+    value = d
+    for part in dotted_key.split("."):
+        value = value[part]
+    return value
+
+
 def coerce_value(s):
     """Type-infer a scan_index.csv cell: int, then float, else leave as string."""
     try:
@@ -96,6 +112,25 @@ def load_scan_index(scan_dir):
                 row[key] = coerce_value(value)
             rows.append(row)
     return rows
+
+
+def task_params(rows, task_index):
+    """Look up the swept-key values for one `task_index` from `load_scan_index`'s
+    rows -- the reverse lookup of `select_task_grid` (parameter values -> task
+    index): here we go from a task index back to its parameter values."""
+    for r in rows:
+        if r["task_index"] == task_index:
+            return {k: v for k, v in r.items() if k not in ("task_index", "replicate")}
+    raise ValueError(f"task_index {task_index} not found in scan index")
+
+
+def task_indices_for_params(rows, params):
+    """Return every `task_index` in `rows` matching all key=value pairs in
+    `params` (e.g. `{"chemistry.I0": 1.2, "chemistry.b": 0.5}`) -- the reverse
+    of `task_params`. Unlike `select_task_grid`, this doesn't filter by
+    replicate or error on multiple matches: getting one task_index per
+    replicate back is the normal, expected result."""
+    return [r["task_index"] for r in rows if all(r.get(k) == v for k, v in params.items())]
 
 
 def select_task_grid(rows, key1, key2, replicate=1, fixed=None):
