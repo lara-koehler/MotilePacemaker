@@ -4,6 +4,7 @@ import sys
 import time
 
 import h5py
+import numpy as np
 
 if sys.version_info >= (3, 11):
     import tomllib
@@ -125,3 +126,44 @@ def load_run_lite(h5path, kymo_width=4, verbose=False):
         config_toml = config_toml.decode("utf-8")
     data["params"] = tomllib.loads(config_toml)
     return data
+
+
+def field_stats_over_time(h5path, key="u_field_stack", verbose=False):
+    """Stream the spatial mean and std of a field dataset (default
+    `u_field_stack`) one saved frame at a time, without ever holding more
+    than a single (nx, ny) frame in memory -- a cheap proxy for how
+    spatially uniform/quiescent (std near 0) vs. structured (std elevated,
+    e.g. a wave or burst) the field is at each point in time, over an entire
+    run, without paying for the full `(n_saved, nx, ny)` array.
+
+    Returns `(field_times, mean_per_frame, std_per_frame)`. `field_times` is
+    computed from `[time].dt`/`save_every` in the run's own config, using the
+    same step-numbering convention as the Julia simulation loop (`step =
+    1, 1+save_every, 1+2*save_every, ...`). Note this is a *different*
+    cadence/array than `times` in `load_run`'s output, which is sampled at
+    the source save cadence, not the field's.
+    """
+    with h5py.File(h5path, "r") as f:
+        dset = f[key]  # on-disk shape (ny, nx, n_saved) -- see load_run's docstring
+        n_saved = dset.shape[-1]
+        config_toml = f.attrs["config_toml"]
+        if isinstance(config_toml, bytes):
+            config_toml = config_toml.decode("utf-8")
+        params = tomllib.loads(config_toml)
+        dt = params["time"]["dt"]
+        save_every = params["time"]["save_every"]
+
+        means = np.empty(n_saved)
+        stds = np.empty(n_saved)
+        report_every = max(1, n_saved // 20)
+        for i in range(n_saved):
+            if verbose and i % report_every == 0:
+                print(f"\rfield_stats_over_time: frame {i}/{n_saved}", end="", flush=True)
+            frame = dset[:, :, i]
+            means[i] = frame.mean()
+            stds[i] = frame.std()
+        if verbose:
+            print(f"\rfield_stats_over_time: frame {n_saved}/{n_saved}")
+
+    field_times = (1 + np.arange(n_saved) * save_every) * dt
+    return field_times, means, stds

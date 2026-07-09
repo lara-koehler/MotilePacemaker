@@ -1,6 +1,7 @@
 """Analysis metrics for source trajectories and field snapshots."""
 
 import numpy as np
+from scipy.spatial import cKDTree
 
 
 def unwrap_periodic_1d(x, L):
@@ -56,6 +57,46 @@ def kuramoto_order_parameter_over_time(u_source, v_source, u0=None, v0=None):
     v0 = np.mean(v_source) if v0 is None else v0
     phases = field_phase(u_source, v_source, u0=u0, v0=v0)
     return kuramoto_order_parameter(phases)
+
+
+def bond_orientational_order(positions, L, n=6, k=6):
+    """n-fold bond-orientational order parameter psi_n for a periodic 2D
+    point set (e.g. n=4 for square, n=6 for hexagonal packing): for each
+    particle, average exp(i*n*theta) over the bond angles theta to its `k`
+    nearest neighbors, then average that complex value over all particles
+    and take the magnitude. Near 1 means the point set is locally n-fold
+    coordinated everywhere and in phase (a near-perfect lattice of that
+    symmetry); near 0 means disordered w.r.t. that symmetry (either a
+    different symmetry, or no symmetry at all).
+
+    `positions`: (N, 2). Periodic (minimum-image) neighbor search via
+    `scipy.spatial.cKDTree`'s `boxsize`.
+    """
+    positions = np.asarray(positions) % L
+    n_points = len(positions)
+    tree = cKDTree(positions, boxsize=L)
+    _, idx = tree.query(positions, k=k + 1)  # idx[:, 0] is each point itself
+
+    psi = np.empty(n_points, dtype=complex)
+    for i in range(n_points):
+        dx = positions[idx[i, 1:]] - positions[i]
+        dx -= L * np.round(dx / L)
+        theta = np.arctan2(dx[:, 1], dx[:, 0])
+        psi[i] = np.mean(np.exp(1j * n * theta))
+    return np.abs(np.mean(psi))
+
+
+def nearest_neighbor_distances(positions, L):
+    """Minimum-image distance from each particle to its single nearest
+    neighbor, on a periodic domain of side `L`. `positions`: (N, 2). Returns
+    an (N,) array -- small values flag near-overlapping pairs (e.g. below a
+    mechanical force's short-range cutoff, where two sources have fallen out
+    of range of any longer-range organizing force and are held apart by
+    short-range repulsion alone)."""
+    positions = np.asarray(positions) % L
+    tree = cKDTree(positions, boxsize=L)
+    dist, _ = tree.query(positions, k=2)  # column 0 is self (distance 0)
+    return dist[:, 1]
 
 
 def density_fluctuations(positions, L, window_sizes, n_samples=200, rng=None):
