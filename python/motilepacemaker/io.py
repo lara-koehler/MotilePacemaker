@@ -2,6 +2,7 @@
 
 import sys
 import time
+from pathlib import Path
 
 import h5py
 import numpy as np
@@ -12,6 +13,22 @@ else:
     import tomli as tomllib
 
 ARRAY_KEYS = ["u_field_stack", "v_field_stack", "x_source", "y_source", "u_source", "v_source"]
+
+
+def run_name(h5path):
+    """Infer a short, descriptive name for one run from its .h5 path, used to
+    group that run's processed outputs (plots, .npz, ...) under
+    `data/processed/<run_name>/`.
+
+    Single-run outputs (`run_minimal.jl`'s default) are all named `output.h5`
+    under a descriptive parent directory instead (e.g.
+    `data/raw/minimal/output.h5`) -- in that case the parent directory's name
+    is used. Per-task scan outputs are named `<scan_name>_<task_id>.h5`
+    directly, with no descriptive parent directory -- in that case the
+    file's own stem is used unchanged.
+    """
+    path = Path(h5path)
+    return path.parent.name if path.stem == "output" else path.stem
 
 
 def load_run(h5path, keys=None, verbose=False, field_stride=1):
@@ -167,3 +184,37 @@ def field_stats_over_time(h5path, key="u_field_stack", verbose=False):
 
     field_times = (1 + np.arange(n_saved) * save_every) * dt
     return field_times, means, stds
+
+
+def nearest_field_frame_index(h5path, t, key="u_field_stack"):
+    """Index of the saved field frame whose simulation time is closest to
+    `t`, using the same `field_times = (1 + arange(n_saved) * save_every) *
+    dt` convention as `field_stats_over_time`. Only reads the dataset's shape
+    and the run's config (not the array itself), so this is cheap even
+    against a large raw file.
+
+    Returns `(frame_idx, actual_time, params)` -- `actual_time` is that
+    frame's true simulation time (not necessarily exactly `t`, since only
+    saved frames exist), and `params` is the run's parsed config (so a
+    caller doesn't have to reopen the file to get it).
+    """
+    with h5py.File(h5path, "r") as f:
+        n_saved = f[key].shape[-1]
+        config_toml = f.attrs["config_toml"]
+    if isinstance(config_toml, bytes):
+        config_toml = config_toml.decode("utf-8")
+    params = tomllib.loads(config_toml)
+    dt = params["time"]["dt"]
+    save_every = params["time"]["save_every"]
+
+    field_times = (1 + np.arange(n_saved) * save_every) * dt
+    frame_idx = int(np.argmin(np.abs(field_times - t)))
+    return frame_idx, float(field_times[frame_idx]), params
+
+
+def load_field_frame(h5path, frame_idx, key="u_field_stack"):
+    """Read a single saved field frame (nx, ny) via an HDF5 hyperslab
+    selection, without loading the rest of the `(n_saved, nx, ny)` stack --
+    see `load_run`'s docstring for why axes need transposing here."""
+    with h5py.File(h5path, "r") as f:
+        return f[key][:, :, frame_idx].T

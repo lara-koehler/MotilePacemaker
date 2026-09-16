@@ -99,6 +99,94 @@ def nearest_neighbor_distances(positions, L):
     return dist[:, 1]
 
 
+def local_field_values(positions, u_field, L):
+    """Value of `u_field` at the grid cell nearest to each position, matching
+    the Julia simulation's own sampling convention (`local_field_index` in
+    sources.jl -- nearest-cell, not interpolated). `positions`: (N, 2).
+    `u_field`: (nx, ny)."""
+    positions = np.asarray(positions)
+    nx, ny = u_field.shape
+    ix = np.mod(np.round(positions[:, 0] / L * nx).astype(int), nx)
+    iy = np.mod(np.round(positions[:, 1] / L * ny).astype(int), ny)
+    return u_field[ix, iy]
+
+
+def compute_mechanical_forces(positions, u_field, L, mech, dt=None):
+    """Net mechanical force (WCA + field-gated) on each source, at one
+    instant -- a direct, fully-vectorized (all N^2 pairs at once, no
+    per-pair Python loop) port of julia/src/sources.jl's per-step force law
+    (`compute_forces`/`accumulate_pair_force!`/`pair_raw_force`), for
+    diagnostic plotting only. The actual simulation always runs in Julia;
+    this never needs to be fast enough for a hot per-step loop, just correct.
+
+    `positions`: (N, 2). `u_field`: (nx, ny), the field snapshot to sample
+    (via `local_field_values`) and gate the attraction/repulsion sign on.
+    `mech`: a run's resolved `[mechanics]` config dict (`params["mechanics"]`
+    from `io.load_run`/`load_run_lite`) -- `sigma`, `epsilon_LJ`,
+    `interaction_strength`, `interaction_range`, `u_threshold`,
+    `reciprocity`, and optionally `rcut_far_factor` (default 5.0),
+    `rcut_near_factor` (default 0.05), `max_force`.
+
+    `dt`, if given and `mech` has no explicit `max_force`, reproduces the
+    Julia side's own automatic default (`io.jl`: `0.5 * sigma / (dt *
+    mobility)`) instead of leaving the force uncapped -- pass the run's
+    `params["time"]["dt"]` for results that match the actual simulation.
+    """
+    positions = np.asarray(positions)
+    N = positions.shape[0]
+    local_u = local_field_values(positions, u_field, L)
+
+    # dx[i, j] = xj - xi (periodic minimum image), matching sources.jl's own
+    # `dx = positions[j] - positions[i]` convention
+    dx = positions[None, :, 0] - positions[:, None, 0]
+    dy = positions[None, :, 1] - positions[:, None, 1]
+    dx -= L * np.round(dx / L)
+    dy -= L * np.round(dy / L)
+    dist2 = dx**2 + dy**2
+    np.fill_diagonal(dist2, np.inf)  # exclude self-interaction
+    dist = np.sqrt(dist2)
+
+    sigma, epsilon = mech["sigma"], mech["epsilon_LJ"]
+    rc2_wca = (2 ** (1 / 6) * sigma) ** 2
+    inv_r2 = 1.0 / dist2
+    inv_r6 = sigma**6 * inv_r2**3
+    inv_r12 = inv_r6**2
+    f_wca = np.where(dist2 < rc2_wca, 24 * epsilon * inv_r2 * (2 * inv_r12 - inv_r6), 0.0)
+
+    r0, strength = mech["interaction_range"], mech["interaction_strength"]
+    rcut_far2 = (mech.get("rcut_far_factor", 5.0) * r0) ** 2
+    rcut_near2 = (mech.get("rcut_near_factor", 0.05) * r0) ** 2
+    gate_active = (dist2 < rcut_far2) & (dist2 > rcut_near2)
+
+    if mech.get("reciprocity", "nonreciprocal") == "reciprocal":
+        gate_u = 0.5 * (local_u[:, None] + local_u[None, :])
+        sign = np.where(gate_u > mech["u_threshold"], 1.0, -1.0)
+    else:
+        # nonreciprocal: force on i (row i) is gated by u at i alone, so this
+        # broadcasts row-wise rather than symmetrizing across the pair
+        sign = np.where(local_u[:, None] > mech["u_threshold"], 1.0, -1.0) * np.ones_like(dist2)
+
+    mag_gated = np.where(gate_active, sign * strength * np.exp(-dist / r0) / dist, 0.0)
+
+    fx_raw = (f_wca + mag_gated) * dx
+    fy_raw = (f_wca + mag_gated) * dy
+
+    if "max_force" in mech:
+        max_force = mech["max_force"]
+    elif dt is not None:
+        max_force = 0.5 * sigma / (dt * mech["mobility"])
+    else:
+        max_force = np.inf
+    mag = np.sqrt(fx_raw**2 + fy_raw**2)
+    scale = np.where(mag > max_force, max_force / np.where(mag > 0, mag, 1.0), 1.0)
+
+    # sum over j of -(capped pair force), matching accumulate_pair_force!'s
+    # `forces[i] -= fx` -- see this function's docstring for why this single
+    # row-sum, with no separate i<j/i>j bookkeeping, reproduces both the
+    # reciprocal and nonreciprocal cases exactly
+    return np.stack([-(fx_raw * scale).sum(axis=1), -(fy_raw * scale).sum(axis=1)], axis=1)
+
+
 def density_fluctuations(positions, L, window_sizes, n_samples=200, rng=None):
     """Variance of particle counts in randomly placed square windows of each
     size in `window_sizes`, on a periodic domain of side `L`. A general,

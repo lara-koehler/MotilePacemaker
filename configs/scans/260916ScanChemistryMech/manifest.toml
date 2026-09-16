@@ -1,0 +1,2 @@
+base_config = "base_config.toml"
+keys = ["chemistry.b", "chemistry.I0", "mechanics.interaction_strength"]

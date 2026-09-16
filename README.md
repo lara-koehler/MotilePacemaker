@@ -84,10 +84,14 @@ data/
 cd julia
 julia --project=. -e 'using Pkg; Pkg.instantiate()'   # first time only
 julia --project=. test/runtests.jl                     # run tests
-julia --project=. scripts/run_minimal.jl ../configs/minimal.toml
+julia --project=. scripts/run_minimal.jl ../configs/minimal.toml ../data/raw/minimal/output.h5
 ```
 
-This writes `data/raw/minimal/output.h5`.
+**Always pass the output path explicitly** (second argument) -- `run_minimal.jl`
+does not derive it from the config filename, so e.g. running with
+`../configs/chaotic.toml` but no second argument still writes to
+`data/raw/minimal/output.h5` (silently overwriting any previous run left
+there) rather than `data/raw/chaotic/output.h5`.
 
 ## Analysis (Python)
 

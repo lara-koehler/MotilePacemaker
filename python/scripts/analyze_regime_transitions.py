@@ -77,7 +77,7 @@ def main():
         sys.exit(1)
 
     h5path = positional[0]
-    run_name = Path(h5path).stem
+    run_name = io.run_name(h5path)
     out_dir = Path(positional[1]) if len(positional) > 1 else Path("../data/processed") / run_name
     out_dir.mkdir(parents=True, exist_ok=True)
 
@@ -154,14 +154,18 @@ def main():
 
     axes[2].plot(source_times, psi4, label="psi4 (square)")
     axes[2].plot(source_times, psi6, label="psi6 (hexagonal)")
-    axes[2].plot(source_times, kuramoto_r, label="Kuramoto r", alpha=0.6, color="grey")
-    axes[2].set_ylabel("order parameter")
-    axes[2].set_ylim(0, 1.05)
-    axes[2].set_title("lattice bond-orientational order + Kuramoto order")
-    axes[2].legend(loc="upper right", fontsize=8)
+    axes[2].set_ylabel("bond-orientational order (psi4, psi6)")
+    #axes[2].set_ylim(0, 1.05)
+    ax2b = axes[2].twinx()
+    ax2b.plot(source_times, kuramoto_r, color="grey", alpha=0.6, label="Kuramoto r")
+    ax2b.set_ylabel("Kuramoto r", color="grey")
+    ax2b.set_ylim(0, 1.05)
+    axes[2].set_title("lattice bond-orientational order (left) vs. Kuramoto order (right)")
+    axes[2].legend(loc="upper left", fontsize=8)
 
     axes[3].plot(source_times, min_nn_dist, label="min NN distance")
     axes[3].axhline(defect_radius, color="grey", ls="--", lw=1, label="defect radius (rcut_near)")
+    axes[3].set_yscale("log")
     ax3b = axes[3].twinx()
     ax3b.plot(source_times, defect_count, color="C1", alpha=0.6, label="# defect pairs")
     ax3b.set_ylabel("# defect pairs", color="C1")
