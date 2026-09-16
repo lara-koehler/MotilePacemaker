@@ -15,8 +15,8 @@
 #   python python/scripts/generate_param_scan.py configs/scans/<scan_name>.toml
 #   -> prints "Set #SBATCH --array=1-N"; put that N below.
 
-##SBATCH --time=48:00:00
-##SBATCH --partition=medium
+#SBATCH --time=48:00:00
+#SBATCH --partition=medium
 
 #medium 2-00:00:00
 #short 02:00:00
