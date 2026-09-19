@@ -21,6 +21,19 @@ Writes <output_dir>/<scan_name>_aggregate.h5, with one HDF5 group per task
 group attribute for provenance. Missing/unreadable task files are skipped
 with a warning rather than aborting the whole run, so this can also be used
 to check progress on a scan that's still in flight.
+
+Resumable: the aggregate file is opened in append mode (created fresh if it
+doesn't exist yet), and any task already present with its `complete` marker
+attribute set is skipped rather than re-read from the (typically much
+larger, possibly slow/network-mounted) raw file -- so re-running this
+script against a scan that's partway aggregated, or one where more tasks
+have since finished, only does work for the tasks not yet aggregated. The
+file is flushed to disk after every task, so an interrupted connection (or
+job timeout) only loses whatever task was mid-read at that moment, not the
+tasks already aggregated in that run or earlier ones. To force a specific
+task to be re-aggregated (e.g. its raw file changed), delete its
+`task_<k>` group from the aggregate first (or delete the whole aggregate
+file to start over).
 """
 import sys
 from pathlib import Path
@@ -74,13 +87,28 @@ def aggregate_task(raw_h5_path, n_traj):
 
 
 def write_task_group(h5file, task_index, summary):
-    group = h5file.create_group(f"task_{task_index}")
+    group_name = f"task_{task_index}"
+    if group_name in h5file:
+        # a partial group left over from a run interrupted mid-write -- drop
+        # it and rewrite from scratch rather than leaving stale/incomplete
+        # datasets behind
+        del h5file[group_name]
+    group = h5file.create_group(group_name)
     for key in ("final_u_field", "kymograph", "trajectory_x", "trajectory_y"):
         group.create_dataset(key, data=summary[key], compression="gzip", compression_opts=4)
     for key in ("final_positions", "times", "kuramoto_r"):
         group.create_dataset(key, data=summary[key])
     group.attrs["L"] = summary["L"]
     group.attrs["config_toml"] = summary["config_toml"]
+    # set only once every dataset above has been written successfully, so a
+    # crash/interruption mid-write leaves this task without the marker --
+    # `is_task_cached` below then correctly treats it as not yet done
+    group.attrs["complete"] = True
+
+
+def is_task_cached(h5file, task_index):
+    group_name = f"task_{task_index}"
+    return group_name in h5file and bool(h5file[group_name].attrs.get("complete", False))
 
 
 def main():
@@ -102,24 +130,29 @@ def main():
     output_dir.mkdir(parents=True, exist_ok=True)
     output_path = output_dir / f"{scan_name}_aggregate.h5"
 
-    n_ok, n_skipped = 0, 0
-    with h5py.File(output_path, "w") as agg:
+    n_ok, n_skipped, n_cached = 0, 0, 0
+    with h5py.File(output_path, "a") as agg:
         for row in rows:
             task_index = row["task_index"]
+            if is_task_cached(agg, task_index):
+                n_cached += 1
+                continue
             raw_path = raw_results_dir / f"{scan_name}_{task_index}.h5"
             try:
                 summary = aggregate_task(raw_path, n_traj)
                 write_task_group(agg, task_index, summary)
+                agg.flush()  # commit this task to disk now, not just at process exit
                 n_ok += 1
             except (FileNotFoundError, OSError, KeyError) as e:
                 print(f"  [skip] task {task_index} ({raw_path.name}): {e}")
                 n_skipped += 1
             if task_index % 10 == 0 or task_index == n_tasks:
-                print(f"  {task_index}/{n_tasks} processed ({n_ok} ok, {n_skipped} skipped)")
+                print(f"  {task_index}/{n_tasks} processed "
+                      f"({n_ok} new, {n_cached} cached, {n_skipped} skipped)")
 
     raw_size = sum(f.stat().st_size for f in raw_results_dir.glob(f"{scan_name}_*.h5"))
     agg_size = output_path.stat().st_size
-    print(f"Wrote {output_path} ({n_ok} tasks, {n_skipped} skipped)")
+    print(f"Wrote {output_path} ({n_ok} new, {n_cached} already cached, {n_skipped} skipped)")
     if raw_size:
         print(f"Aggregate size: {agg_size / 1e6:.1f} MB vs raw {raw_size / 1e9:.2f} GB "
               f"({raw_size / max(agg_size, 1):.0f}x reduction)")

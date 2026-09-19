@@ -1,0 +1,75 @@
+# Base config for the 260919ScanChechRangeMobilityReciprocity scan.
+# Derived from wave.toml, with I0 raised to 0.5 (fixed, not swept) and
+# interaction_range tightened to 0.1 -- and to actually resolve dynamics at
+# that shorter range/faster timescale, dt/n_steps/save_every/
+# source_save_every all rescaled from wave.toml's, and mechanics.rcut_far_factor
+# lowered to 2.0 (far cutoff = 2 * 0.1 = 0.2, instead of the 5x default).
+#
+# Original wave.toml docstring, still applicable to the parts unchanged here
+# (grid, sources, coupling):
+#
+# "Wave" regime: oscillatory pacemaker sources (period ~34.4, measured via a
+# 0D check of the source excitation I0+pacemaker_strength=0.4) embedded in an
+# excitable (non-oscillatory) background at I0=-1.6, moderate mechanical
+# feedback (chi ~ 0.3, Gamma ~ 1.6 at this spacing). Same chemistry/mechanics
+# as configs/minimal.toml, but run long enough (dt x10, steps x9) to actually
+# see several oscillation periods and wave crossings of the domain.
+#
+# Sources: 510 on a 17x30 grid_fill (a band, spanning the whole domain)
+# rather than the original 10-source 1D line -- a true 1D line cannot
+# physically fit 500 non-overlapping sources at this sigma (max is
+# ~L/(2^(1/6)*sigma) ~ 89). A first attempt at a much more extreme 5x100 band
+# packed sources only 1 grid cell apart (spacing 0.01 at nx=100), which is
+# unresolvable at any practical grid resolution while also keeping them
+# spatially distinct (would need nx~1000+); 17x30 (spacing ~0.033) is a
+# compromise that keeps a clearly non-square "band" character while staying
+# resolvable at nx=300 with a proportionally smaller pacemaker_width (see
+# [coupling] below) -- otherwise 510 overlapping pacemaker Gaussians summed
+# to a net excitation of up to I~23 in testing, versus the I=0.4 this whole
+# regime is calibrated around, and the system just froze into one
+# homogeneous/synchronized state instead of propagating a wave.
+
+[grid]
+L = 1.0
+nx = 300
+ny = 300
+
+[time]
+dt = 0.005
+n_steps = 400000
+save_every = 800
+source_save_every = 150
+seed = 1
+
+[chemistry]
+tau_u = 1.0
+tau_v = 12.5
+a = 0.2
+b = 0.2
+I0 = 0.5
+Du = 0.001
+Dv = 0.0
+
+[coupling]
+pacemaker_strength = 2.0
+pacemaker_width = 0.01   # ~0.3x the tightest source spacing (0.033), so bumps stay distinct
+
+[mechanics]
+mobility = 0.1
+sigma = 0.01
+epsilon_LJ = 1.0
+interaction_strength = 0.1
+interaction_range = 0.1
+u_threshold = 0.0
+reciprocity = "reciprocal"
+rcut_far_factor = 2.0   # far cutoff = 2 * 0.1 = 0.2, instead of the 5x default
+
+[noise]
+field_sigma_u = 0.0
+field_sigma_v = 0.0
+position_sigma = 0.0
+
+[sources]
+arrangement = "grid_fill"
+grid_rows = 17
+grid_cols = 30

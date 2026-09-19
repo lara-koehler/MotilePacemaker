@@ -15,6 +15,13 @@ Defaults out_dir to data/processed/<scan_name>/, where scan_name is the
 aggregate file's parent directory name (matching aggregate_scan.py's
 <output_dir>/<scan_name>_aggregate.h5 convention). Saves as
 <out_dir>/<task_index>_summary.png.
+
+If ../configs/scans/<scan_name>/manifest.toml can be found (i.e. run from
+python/ in a checkout with that scan's config still present), the swept
+parameters' actual values for this task -- read from the task's own
+config_toml, stored in the aggregate by aggregate_scan.py -- are shown in
+the figure title, same convention as make_movie.py. Silently skipped if the
+manifest isn't found.
 """
 import sys
 from pathlib import Path
@@ -22,7 +29,33 @@ from pathlib import Path
 import h5py
 import matplotlib.pyplot as plt
 
-from motilepacemaker import metrics, viz
+if sys.version_info >= (3, 11):
+    import tomllib
+else:
+    import tomli as tomllib
+
+from motilepacemaker import metrics, scan, viz
+
+
+def swept_params_label(config_toml, scan_dir):
+    """Best-effort: if `scan_dir`'s manifest.toml can be found, return a
+    "key=value, key=value" string of this task's actual swept-parameter
+    values, read from its own resolved config_toml (so it's always accurate
+    for this task). Returns None otherwise -- never raises."""
+    try:
+        manifest = scan.load_manifest(scan_dir)
+    except (FileNotFoundError, OSError):
+        return None
+    if isinstance(config_toml, bytes):
+        config_toml = config_toml.decode("utf-8")
+    params = tomllib.loads(config_toml)
+    parts = []
+    for key in manifest["keys"]:
+        try:
+            parts.append(f"{key}={scan.dotted_get(params, key)}")
+        except KeyError:
+            continue
+    return ", ".join(parts) if parts else None
 
 
 def main():
@@ -44,6 +77,7 @@ def main():
         trajectory_x = group["trajectory_x"][()]
         times = group["times"][()]
         L = group.attrs["L"]
+        config_toml = group.attrs["config_toml"]
 
     fig, axes = plt.subplots(1, 3, figsize=(15, 5))
 
@@ -58,7 +92,12 @@ def main():
     viz.plot_trajectories(x_unwrapped, ax=axes[2], times=times)
     axes[2].set_title(f"unwrapped x trajectories ({trajectory_x.shape[0]} of full population)")
 
-    fig.suptitle(f"{scan_name} -- task {task_index}")
+    scan_dir = Path("../configs/scans") / scan_name
+    label = swept_params_label(config_toml, scan_dir)
+    title = f"{scan_name} -- task {task_index}"
+    if label:
+        title += f" ({label})"
+    fig.suptitle(title)
     fig.tight_layout()
 
     out_path = out_dir / f"{task_index}_summary.png"

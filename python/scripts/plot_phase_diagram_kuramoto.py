@@ -7,10 +7,15 @@ A true scalar phase diagram: same (key1, key2) grid selection as
 plot_phase_diagram.py (key1 -> rows, key2 -> columns, one replicate per
 cell), but instead of tiling final-state images, plots a single heatmap of
 the Kuramoto order parameter averaged over the last `--n-last` saved
-timesteps of each selected task.
+timesteps of each selected task. If the scan sweeps more than 2 keys, the
+extra keys default to the value of the scan's first simulation -- override
+any of them with repeated --fix key=value flags.
 
 Whole-scan plot, saved with a leading underscore per convention:
-data/processed/<scan_name>/_phase_diagram_kuramoto_<key1>_<key2>.png
+data/processed/<scan_name>/_phase_diagram_kuramoto_<key1>_<key2>.png -- if
+the scan sweeps extra keys beyond key1/key2, their (defaulted or --fix'd)
+values are appended to the filename, e.g.
+_phase_diagram_kuramoto_<key1>_<key2>_<key3>=<value>.png
 """
 import sys
 from pathlib import Path
@@ -60,6 +65,18 @@ def main():
     out_dir.mkdir(parents=True, exist_ok=True)
 
     rows = scan.load_scan_index(scan_config_dir)
+
+    # Extra swept keys beyond key1/key2 must be pinned or every cell with
+    # more than one such combination is ambiguous. Default to the first
+    # simulation's values, overridable via --fix.
+    swept_keys = [k for k in rows[0] if k not in ("task_index", "replicate")]
+    extra_keys = [k for k in swept_keys if k not in (key1, key2)]
+    defaulted = {k: rows[0][k] for k in extra_keys if k not in fixed}
+    fixed = {**defaulted, **fixed}
+    if defaulted:
+        print("Pinning unshown scan key(s) to first simulation's value(s): "
+              + ", ".join(f"{k}={v}" for k, v in defaulted.items()))
+
     key1_values, key2_values, task_grid = scan.select_task_grid(rows, key1, key2, replicate, fixed)
     n_rows, n_cols = len(key1_values), len(key2_values)
 
@@ -85,7 +102,8 @@ def main():
     fig.suptitle(f"{scan_name}: Kuramoto order parameter, replicate {replicate}")
     fig.tight_layout()
 
-    out_path = out_dir / f"_phase_diagram_kuramoto_{key1}_{key2}.png"
+    extra_suffix = "".join(f"_{k}={fixed[k]}" for k in extra_keys)
+    out_path = out_dir / f"_phase_diagram_kuramoto_{key1}_{key2}{extra_suffix}.png"
     fig.savefig(out_path, dpi=150)
     print(f"Saved {out_path}")
 

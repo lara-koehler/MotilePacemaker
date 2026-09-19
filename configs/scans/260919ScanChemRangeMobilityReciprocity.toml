@@ -1,0 +1,26 @@
+# Parameter-scan sweep spec, consumed by python/scripts/generate_param_scan.py.
+#
+# base_config is resolved relative to this file's own directory. Points at
+# ../wave_260919_base.toml (a dedicated derivative of wave.toml, not wave.toml
+# itself) -- I0=0.5, interaction_strength=0.1, interaction_range=0.1 are fixed
+# there directly rather than swept, so regenerating this scan never depends on
+# (or risks colliding with) wave.toml or any other scan that shares it.
+# 5 (u_threshold) x 5 (b) x 3 (mobility) x 2 (reciprocity) = 150 simulations.
+
+base_config = "../wave_260919_base.toml"
+
+[[sweep]]
+key = "chemistry.b"
+values = [0.1, 0.25, 0.5, 0.75, 1]
+
+[[sweep]]
+key = "mechanics.u_threshold"
+values = [-1, -0.5, 0, 0.5, 1]
+
+[[sweep]]
+key = "mechanics.mobility"
+values = [0.01, 0.05, 0.1]
+
+[[sweep]]
+key = "mechanics.reciprocity"
+values = ["reciprocal", "nonreciprocal"]

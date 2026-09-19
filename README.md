@@ -110,12 +110,13 @@ python scripts/make_movie.py ../data/raw/minimal/output.h5 ../data/processed/min
 python scripts/make_movie.py ../data/raw/minimal/output.h5 ../data/processed/minimal_preview.mp4 4
 ```
 
-**This local workflow (`run_minimal.jl` + a single `configs/*.toml` file) is unaffected by the cluster tooling below** -- it's still the fastest way to run one simulation.
+**This local workflow (`run_minimal.jl` + a single `configs/*.toml` file) is unaffected by the cluster tooling in [README_cluster.md](README_cluster.md)** -- it's still the fastest way to run one simulation.
 
 Both scripts avoid reading a raw run's full `u_field_stack` -- easily the
 dominant contributor to file size (~1 GB for a large run) -- since that
 matters most when `<output.h5>` sits on a slow/network-mounted path (e.g. a
-mounted cluster results drive, see step 5 below):
+mounted cluster results drive, see [README_cluster.md](README_cluster.md)'s
+step 5):
 - `plot_summary.py` (via `motilepacemaker.io.load_run_lite`) only reads the
   last saved field frame and a thin y=L/2 kymograph strip, both via HDF5
   hyperslab selections, plus the source trajectories in full. One
@@ -132,135 +133,9 @@ mounted cluster results drive, see step 5 below):
   task are shown on every frame automatically (no flag needed, silently
   skipped for a plain non-scan run).
 
-## Cluster parameter scans (SLURM)
+## Cluster usage
 
-For sweeping one or more parameters over many combinations as a SLURM job
-array, following the `parameters_array.txt` convention (one line per array
-task, `sed -n -e "$SLURM_ARRAY_TASK_ID p"` extracts that task's values):
-
-1. **One-time setup**: push this repo to a private GitHub/GitLab remote,
-   then on the cluster:
-   ```bash
-   git clone <your-remote-url> MotilePacemaker
-   cd MotilePacemaker/julia && julia --project=. -e 'using Pkg; Pkg.instantiate()'
-   ```
-   To update later, just `git pull` on the cluster (and re-run
-   `Pkg.instantiate()` if `julia/Manifest.toml` changed).
-
-   `aggregate_scan.py` (step 5 below) also needs the `motilepacemaker`
-   package, so set up a Python venv on the cluster too, same as locally
-   (this is a separate install from your laptop's `python/.venv` -- it
-   doesn't get created by `git clone`/`git pull`):
-   ```bash
-   cd MotilePacemaker/python
-   python3 -m venv .venv
-   source .venv/bin/activate
-   pip install -r requirements.txt
-   ```
-   Usually best run on a login node (some clusters block internet access,
-   needed here for `pip install`, from compute nodes). Re-run
-   `pip install -r requirements.txt` after a `git pull` if
-   `python/pyproject.toml` changed.
-
-2. **Write a sweep spec** naming a base config and the dotted TOML keys to
-   scan (any section: `mechanics.*`, `coupling.*`, `sources.*`, ...), e.g.
-   `configs/scans/example_epsilon_width.toml`:
-   ```toml
-   base_config = "../wave.toml"
-   repeats = 1   # optional, default 1 -- see step 4 below
-
-   [[sweep]]
-   key = "mechanics.epsilon_LJ"
-   values = [0.5, 1.0, 2.0]
-
-   [[sweep]]
-   key = "coupling.pacemaker_width"
-   values = [0.01, 0.02, 0.05]
-   ```
-
-3. **Generate the scan** (cartesian product of all `values` lists, each
-   combination repeated `repeats` times):
-   ```bash
-   cd python && source .venv/bin/activate
-   python scripts/generate_param_scan.py ../configs/scans/example_epsilon_width.toml
-   ```
-   Writes `configs/scans/example_epsilon_width/{parameters_array.txt,
-   manifest.toml, base_config.toml, scan_index.csv}` and prints the total
-   simulation count (combinations x repeats) -- use it for
-   `#SBATCH --array=1-N` in `cluster/launch_scan.sh` (also set `--job-name`
-   to the scan's name, which `launch_scan.sh` uses to find the right
-   `configs/scans/<name>/` directory and to name outputs `<name>_<task_id>.h5`).
-
-4. **Submit**: `sbatch cluster/launch_scan.sh` (after editing the `project`
-   path and `--array`/`--job-name` for your scan, per the comments in the
-   script). Each task writes straight to that job's `$scratch`, then copies
-   to `/data/.../Results/<scan_name>/<scan_name>_<task_id>.h5`.
-
-   To run the same parameter combination multiple times with different
-   initial conditions, set `repeats` in the sweep spec (or manually duplicate
-   a line in `parameters_array.txt` for a one-off repeat) -- `run_scan.jl`
-   uses the SLURM array task ID as the run's default random seed, so
-   otherwise-identical lines automatically get different initial conditions
-   (unless the sweep spec explicitly includes `"time.seed"` as a swept key,
-   in which case that value wins instead).
-
-5. **Retrieve results**: raw per-task outputs can be large (e.g. ~900 MB for
-   an nx=300, 180k-step run) -- a full scan can easily reach tens or hundreds
-   of GB, too much to `rsync` down wholesale. Instead, **aggregate on the
-   cluster first**, against the full-size files there, then copy down only
-   the small result:
-   ```bash
-   # on the cluster, with the python/.venv from step 1 activated
-   cd MotilePacemaker/python && source .venv/bin/activate
-   python scripts/aggregate_scan.py \
-       ../configs/scans/<scan_name> /data/biophys/<username>/Results/<scan_name> \
-       ../data/raw/scans/<scan_name>
-   ```
-   This distills each task's raw `.h5` down to just a kymograph, the final
-   field/positions, a handful of source trajectories, and the Kuramoto order
-   parameter over time (computed from the full source population before
-   discarding it) into one `data/raw/scans/<scan_name>/<scan_name>_aggregate.h5`
-   -- typically a ~100-300x size reduction, small enough to `rsync` normally:
-   ```bash
-   rsync -avz your-cluster:.../data/raw/scans/<scan_name>/ data/raw/scans/<scan_name>/
-   ```
-   Missing/failed task files are skipped with a warning rather than aborting,
-   so this can also be run against a scan that's still in progress. Every
-   raw `<scan_name>_<k>.h5` still works with the existing Python pipeline
-   unchanged if you do want to pull one down individually, or even just
-   point straight at it over a mounted path without copying it down at all
-   (`motilepacemaker.io.load_run`/`load_run_lite`, `plot_summary.py`,
-   `make_movie.py`, `metrics.py`, ...) -- each file's `config_toml` attribute
-   records that task's actual resolved parameters (including the per-task
-   seed), and `scan_index.csv` (generated alongside the scan) is a quick
-   human-readable lookup from task index to swept values (also queryable
-   from Python: `motilepacemaker.scan.load_scan_index`, `task_params`,
-   `task_indices_for_params`).
-
-6. **Plot from the aggregate**:
-   ```bash
-   cd python && source .venv/bin/activate
-
-   # one task's 3-panel summary (final field state, kymograph, trajectories)
-   python scripts/plot_scan_task_summary.py ../data/raw/scans/<scan_name>/<scan_name>_aggregate.h5 7
-
-   # grid of final-state images: key1 -> rows, key2 -> columns, one replicate per cell
-   python scripts/plot_phase_diagram.py ../data/raw/scans/<scan_name>/<scan_name>_aggregate.h5 \
-       ../configs/scans/<scan_name> chemistry.I0 chemistry.b
-
-   # same grid, but each cell is that task's kymograph instead of its final state
-   python scripts/plot_phase_diagram_kymograph.py ../data/raw/scans/<scan_name>/<scan_name>_aggregate.h5 \
-       ../configs/scans/<scan_name> chemistry.I0 chemistry.b
-
-   # scalar phase diagram: Kuramoto order parameter averaged over the last few steps
-   python scripts/plot_phase_diagram_kuramoto.py ../data/raw/scans/<scan_name>/<scan_name>_aggregate.h5 \
-       ../configs/scans/<scan_name> chemistry.I0 chemistry.b --n-last 10
-   ```
-   All three phase-diagram scripts take `--replicate N` (default 1, since a
-   scan with `repeats > 1` has several tasks per parameter combination) and
-   `--fix key=value` (repeatable; only needed if the scan sweeps more than
-   the 2 keys being plotted, to resolve which task a cell should show).
-
-   All output PNGs are saved to `data/processed/<scan_name>/`: per-task
-   plots as `<task_index>_summary.png`, whole-scan plots with a leading
-   underscore, e.g. `_phase_diagram_chemistry.I0_chemistry.b.png`.
+Running parameter scans on a SLURM cluster (including cluster-specific
+Python environment setup) and analyzing results directly there, e.g. via
+`aggregate_scan.py`, `plot_scan_task_summary.py`, or the `plot_phase_diagram*`
+scripts, is covered in [README_cluster.md](README_cluster.md).
