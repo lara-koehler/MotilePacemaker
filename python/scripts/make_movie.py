@@ -61,7 +61,7 @@ def detect_swept_params_label(h5path, params, scans_dir=Path("../configs/scans")
         try:
             # read straight from this task's own resolved config, not
             # scan_index.csv, so it can't go stale relative to the file
-            parts.append(f"{key}={scan.dotted_get(params, key)}")
+            parts.append(f"{key}={scan.dotted_get(params, key)}\n")
         except KeyError:
             continue
     return ", ".join(parts) if parts else None
