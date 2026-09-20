@@ -65,7 +65,7 @@ def detect_swept_params_label(h5path, params, scans_dir=Path("../configs/scans")
             parts.append(f"{key}={scan.dotted_get(params, key)}")
             param_shown +=1
             if param_shown %2 ==0 :
-                parts.append("/n")
+                parts.append("\n")
             
         except KeyError:
             continue
