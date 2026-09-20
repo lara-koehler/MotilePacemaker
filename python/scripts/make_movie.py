@@ -57,11 +57,16 @@ def detect_swept_params_label(h5path, params, scans_dir=Path("../configs/scans")
     except (FileNotFoundError, OSError):
         return None
     parts = []
+    param_shown = 0 
     for key in manifest["keys"]:
         try:
             # read straight from this task's own resolved config, not
             # scan_index.csv, so it can't go stale relative to the file
-            parts.append(f"{key}={scan.dotted_get(params, key)}\n")
+            parts.append(f"{key}={scan.dotted_get(params, key)}")
+            param_shown +=1
+            if param_shown %2 ==0 :
+                parts.append("/n")
+            
         except KeyError:
             continue
     return ", ".join(parts) if parts else None
