@@ -20,8 +20,9 @@ def plot_field_snapshot(u, positions, L, ax=None, vmin=None, vmax=None, title=""
     else:
         fig = ax.figure
 
-    im = ax.imshow(u.T, origin="lower", extent=[0, L, 0, L], cmap=cmap, vmin=vmin, vmax=vmax)
-    ax.scatter(positions[:, 0], positions[:, 1], c=colors, s=markersize, edgecolor="white", linewidths=0.5, alpha=0.9)
+    im = ax.imshow(u.T, origin="lower", extent=[0, L, 0, L], cmap=cmap, vmin=vmin, vmax=vmax, zorder=0)
+    ax.scatter(positions[:, 0], positions[:, 1], c=colors, s=markersize, edgecolor="white", linewidths=0.5,
+               alpha=0.9, zorder=2)
     ax.set_title(title)
     ax.set_xlabel("x")
     ax.set_ylabel("y")
@@ -84,7 +85,7 @@ def plot_trajectories(x_unwrapped, ax=None, times=None):
 
 def plot_trajectories_2d(x_source, y_source, L=None, times=None, t_window=None, frac=1.0,
                           rng=None, ax=None, mark_start=True, mark_end=True, alpha=0.8,
-                          color=None):
+                          color=None, zorder=1):
     """Plot the 2D (x, y) path of every source over a time window, for one
     simulation. `x_source`/`y_source`: (N_sources, T) position arrays, same
     shape/orientation as `io.load_run`/`load_run_lite` return (raw, i.e.
@@ -120,6 +121,11 @@ def plot_trajectories_2d(x_source, y_source, L=None, times=None, t_window=None, 
     `mark_start`/`mark_end`: scatter a marker ("o"/"x", matching each
     trajectory's line color) at its first/last plotted position, to show
     direction of travel at a glance.
+
+    `zorder` (default 1): passed to the `LineCollection`, so callers drawing
+    other layers on the same `ax` (e.g. a field `imshow` below, source
+    markers above) can control stacking order explicitly rather than relying
+    on call order.
     """
     if ax is None:
         fig, ax = plt.subplots(figsize=(5, 5))
@@ -161,12 +167,12 @@ def plot_trajectories_2d(x_source, y_source, L=None, times=None, t_window=None, 
             segments = segments[~jump]
             seg_colors = seg_colors[~jump]
 
-        ax.add_collection(LineCollection(segments, colors=seg_colors, alpha=alpha, linewidth=1))
+        ax.add_collection(LineCollection(segments, colors=seg_colors, alpha=alpha, linewidth=1, zorder=zorder))
 
     if mark_start:
-        ax.scatter(x_source[:, 0], y_source[:, 0], c=colors, marker="o", s=16, zorder=3)
+        ax.scatter(x_source[:, 0], y_source[:, 0], c=colors, marker="o", s=16, zorder=zorder + 2)
     if mark_end:
-        ax.scatter(x_source[:, -1], y_source[:, -1], c=colors, marker="x", s=36, zorder=3)
+        ax.scatter(x_source[:, -1], y_source[:, -1], c=colors, marker="x", s=36, zorder=zorder + 2)
 
     if L is not None:
         ax.set_xlim(0, L)

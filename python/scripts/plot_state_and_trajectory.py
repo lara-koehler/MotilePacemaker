@@ -106,10 +106,13 @@ def main():
     )
     fig.colorbar(im, ax=ax, shrink=0.8, label="u")
 
-    # drawn on top of the field/positions just plotted, same axes
+    # drawn on the same axes, above the field but below the source markers
+    # (zorder=1, between plot_field_snapshot's imshow at 0 and scatter at 2);
+    # no start/end markers here, since the current positions are already
+    # shown by the field snapshot's own source markers
     viz.plot_trajectories_2d(x_source, y_source, L=L, times=data["times"],
                               t_window=traj_window, frac=percentage_traj,
-                              ax=ax, color="royalblue")
+                              ax=ax, color="royalblue", mark_start=False, mark_end=False)
     window_label = f"t in [{traj_window[0]}, {traj_window[1]}]" if traj_window else "full run"
     n_sources = x_source.shape[0]
     n_selected = max(1, round(percentage_traj * n_sources))
