@@ -83,7 +83,8 @@ def plot_trajectories(x_unwrapped, ax=None, times=None):
 
 
 def plot_trajectories_2d(x_source, y_source, L=None, times=None, t_window=None, frac=1.0,
-                          rng=None, ax=None, mark_start=True, mark_end=True, alpha=0.8):
+                          rng=None, ax=None, mark_start=True, mark_end=True, alpha=0.8,
+                          color=None):
     """Plot the 2D (x, y) path of every source over a time window, for one
     simulation. `x_source`/`y_source`: (N_sources, T) position arrays, same
     shape/orientation as `io.load_run`/`load_run_lite` return (raw, i.e.
@@ -94,6 +95,11 @@ def plot_trajectories_2d(x_source, y_source, L=None, times=None, t_window=None, 
     large enough that plotting all of them is slow or visually cluttered.
     `rng`, if given (a `numpy.random.Generator`), makes the selection
     reproducible; otherwise a fresh one is used each call.
+
+    `color`, if given, draws every trajectory (and its start/end markers) in
+    this single color instead of the default per-source color cycle -- e.g.
+    "royalblue" to keep all plotted trajectories visually distinct from the
+    field (red) and source markers (grey) elsewhere in a figure.
 
     Drawn as a single `LineCollection` (one segment per consecutive pair of
     samples, all sources at once) rather than a per-source Python loop of
@@ -137,8 +143,11 @@ def plot_trajectories_2d(x_source, y_source, L=None, times=None, t_window=None, 
         y_source = y_source[:, lo:hi]
 
     n_sources, n_steps = x_source.shape
-    cycle = plt.rcParams["axes.prop_cycle"].by_key()["color"]
-    colors = np.array([cycle[i % len(cycle)] for i in range(n_sources)])
+    if color is not None:
+        colors = np.array([color] * n_sources)
+    else:
+        cycle = plt.rcParams["axes.prop_cycle"].by_key()["color"]
+        colors = np.array([cycle[i % len(cycle)] for i in range(n_sources)])
 
     if n_steps > 1:
         points = np.stack([x_source, y_source], axis=-1)  # (N, T, 2)
