@@ -85,7 +85,7 @@ def plot_trajectories(x_unwrapped, ax=None, times=None):
 
 def plot_trajectories_2d(x_source, y_source, L=None, times=None, t_window=None, frac=1.0,
                           rng=None, ax=None, mark_start=True, mark_end=True, alpha=0.8,
-                          color=None, zorder=1):
+                          color=None, zorder=1, linewidth=1):
     """Plot the 2D (x, y) path of every source over a time window, for one
     simulation. `x_source`/`y_source`: (N_sources, T) position arrays, same
     shape/orientation as `io.load_run`/`load_run_lite` return (raw, i.e.
@@ -126,6 +126,8 @@ def plot_trajectories_2d(x_source, y_source, L=None, times=None, t_window=None, 
     other layers on the same `ax` (e.g. a field `imshow` below, source
     markers above) can control stacking order explicitly rather than relying
     on call order.
+
+    `linewidth` (default 1): passed to the `LineCollection`.
     """
     if ax is None:
         fig, ax = plt.subplots(figsize=(5, 5))
@@ -167,7 +169,7 @@ def plot_trajectories_2d(x_source, y_source, L=None, times=None, t_window=None, 
             segments = segments[~jump]
             seg_colors = seg_colors[~jump]
 
-        ax.add_collection(LineCollection(segments, colors=seg_colors, alpha=alpha, linewidth=1, zorder=zorder))
+        ax.add_collection(LineCollection(segments, colors=seg_colors, alpha=alpha, linewidth=linewidth, zorder=zorder))
 
     if mark_start:
         ax.scatter(x_source[:, 0], y_source[:, 0], c=colors, marker="o", s=16, zorder=zorder + 2)

@@ -112,7 +112,8 @@ def main():
     # shown by the field snapshot's own source markers
     viz.plot_trajectories_2d(x_source, y_source, L=L, times=data["times"],
                               t_window=traj_window, frac=percentage_traj,
-                              ax=ax, color="royalblue", mark_start=False, mark_end=False)
+                              ax=ax, color="royalblue", mark_start=False, mark_end=False,
+                              linewidth=2)
     window_label = f"t in [{traj_window[0]}, {traj_window[1]}]" if traj_window else "full run"
     n_sources = x_source.shape[0]
     n_selected = max(1, round(percentage_traj * n_sources))
