@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Usage: python scripts/plot_state_and_trajectory.py <output.h5> <t> [out_dir] [out_filename]
-           [--percentage_traj 0.5] [--traj-window t_min t_max]
+           [--percentage_traj 0.5] [--traj-window t_min t_max | --traj-duration d]
 
 Produces one figure, one panel: the field + source positions at the saved
 field frame closest to simulation time `t` (field in "Reds", sources in
@@ -22,7 +22,13 @@ plotted is shown in that panel's title.
 
 `--traj-window t_min t_max` restricts the trajectory panel to that
 simulation-time range (default: the full run); it has no effect on the
-state panel.
+state panel. Mutually exclusive with `--traj-duration`.
+
+`--traj-duration d` restricts the trajectory panel to the `d`-long window
+ending at the plotted state's own time (i.e. `[t_actual - d, t_actual]`, so
+the trajectories always trail up to the frame shown), instead of specifying
+the window's absolute bounds directly. Mutually exclusive with
+`--traj-window`.
 
 Only the one matched field frame is read from `<output.h5>` (via an HDF5
 hyperslab selection, `io.load_field_frame`), not the full u_field_stack --
@@ -42,6 +48,7 @@ def parse_args(argv):
     positional = []
     percentage_traj = 0.5
     traj_window = None
+    traj_duration = None
     i = 0
     while i < len(argv):
         if argv[i] == "--percentage_traj":
@@ -50,17 +57,22 @@ def parse_args(argv):
         elif argv[i] == "--traj-window":
             traj_window = (float(argv[i + 1]), float(argv[i + 2]))
             i += 3
+        elif argv[i] == "--traj-duration":
+            traj_duration = float(argv[i + 1])
+            i += 2
         else:
             positional.append(argv[i])
             i += 1
-    return positional, percentage_traj, traj_window
+    if traj_window is not None and traj_duration is not None:
+        raise ValueError("--traj-window and --traj-duration are mutually exclusive")
+    return positional, percentage_traj, traj_window, traj_duration
 
 
 def main():
-    positional, percentage_traj, traj_window = parse_args(sys.argv[1:])
+    positional, percentage_traj, traj_window, traj_duration = parse_args(sys.argv[1:])
     if len(positional) < 2:
         print("Usage: plot_state_and_trajectory.py <output.h5> <t> [out_dir] [out_filename] "
-              "[--percentage_traj 0.5] [--traj-window t_min t_max]")
+              "[--percentage_traj 0.5] [--traj-window t_min t_max | --traj-duration d]")
         sys.exit(1)
 
     h5path = positional[0]
@@ -69,6 +81,8 @@ def main():
     out_dir.mkdir(parents=True, exist_ok=True)
 
     frame_idx, t_actual, params = io.nearest_field_frame_index(h5path, t_requested)
+    if traj_duration is not None:
+        traj_window = (t_actual - traj_duration, t_actual)
     u = io.load_field_frame(h5path, frame_idx)
     L = params["grid"]["L"]
     save_every = params["time"]["save_every"]
